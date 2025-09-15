@@ -188,11 +188,14 @@ const SafetyScreen: React.FC = () => {
             <Text style={styles.resultScore}>
               Risk Score: {lastCheckResult.riskScore}/100
             </Text>
+            
             {lastCheckResult.detectedPatterns.length > 0 && (
               <View style={styles.patternsContainer}>
-                <Text style={styles.patternsTitle}>Detected Issues:</Text>
+                <Text style={styles.patternsTitle}>Detected Red Flags:</Text>
                 {lastCheckResult.detectedPatterns.map((pattern, index) => (
-                  <Text key={index} style={styles.pattern}>• {pattern}</Text>
+                  <Text key={index} style={styles.patternItem}>
+                    • {pattern}
+                  </Text>
                 ))}
               </View>
             )}
@@ -200,14 +203,14 @@ const SafetyScreen: React.FC = () => {
         )}
       </Card>
 
-      {/* Scam Alerts History */}
+      {/* Recent Scam Alerts */}
       <Card>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>📊 Recent Checks</Text>
+          <Text style={styles.cardTitle}>⚠️ Recent Checks</Text>
           {scamAlerts.length > 0 && (
             <Button
-              title="Clear"
-              variant="secondary"
+              title="Clear All"
+              variant="danger"
               onPress={clearScamHistory}
               style={styles.clearButton}
             />
@@ -225,14 +228,18 @@ const SafetyScreen: React.FC = () => {
                   {new Date(alert.timestamp).toLocaleDateString('en-IN')}
                 </Text>
               </View>
-              <Text style={styles.alertText} numberOfLines={2}>
-                {alert.text}
-              </Text>
-              {alert.url && (
-                <Text style={styles.alertUrl} numberOfLines={1}>
-                  URL: {alert.url}
-                </Text>
+              
+              {alert.text && (
+                <Text style={styles.alertText}>{alert.text}</Text>
               )}
+              
+              {alert.url && (
+                <Text style={styles.alertUrl}>{alert.url}</Text>
+              )}
+              
+              <Text style={styles.alertScore}>
+                Risk Score: {alert.riskScore}/100
+              </Text>
             </View>
           ))
         ) : (
@@ -242,41 +249,44 @@ const SafetyScreen: React.FC = () => {
         )}
       </Card>
 
-      {/* Safety Tips */}
+      {/* Safety Resources */}
       <Card>
-        <Text style={styles.cardTitle}>🛡️ Safety Tips</Text>
-        <View style={styles.tipsList}>
-          <Text style={styles.tip}>• Never share OTP, PIN, or passwords with anyone</Text>
-          <Text style={styles.tip}>• Banks/Government never ask for money via email/SMS</Text>
-          <Text style={styles.tip}>• Always verify before clicking links or downloading files</Text>
-          <Text style={styles.tip}>• Be suspicious of urgent requests for money</Text>
-          <Text style={styles.tip}>• Use official websites and apps only</Text>
-          <Text style={styles.tip}>• Report suspicious activities to authorities</Text>
+        <Text style={styles.cardTitle}>🆘 Emergency Contacts</Text>
+        <View style={styles.emergencyContainer}>
+          <Button
+            title="📞 Cyber Crime Helpline: 1930"
+            variant="secondary"
+            onPress={() => callEmergencyNumber('1930')}
+            style={styles.emergencyButton}
+          />
+          <Button
+            title="🚔 Police Emergency: 100"
+            variant="secondary"
+            onPress={() => callEmergencyNumber('100')}
+            style={styles.emergencyButton}
+          />
+          <Button
+            title="💳 Bank Fraud Helpline"
+            variant="secondary"
+            onPress={() => Alert.alert(
+              'Bank Helplines',
+              'SBI: 1800-2000\nHDFC: 1800-2700\nICICI: 1800-200-3344\nAxis: 1800-200-5577\n\nCall your bank immediately if you suspect fraud!'
+            )}
+            style={styles.emergencyButton}
+          />
         </View>
       </Card>
 
-      {/* Safety Resources */}
+      {/* Scam Prevention Tips */}
       <Card>
-        <Text style={styles.cardTitle}>📞 Report Scams</Text>
-        <View style={styles.resourcesList}>
-          <Button
-            title="🚨 Cyber Crime Helpline: 1930"
-            variant="secondary"
-            onPress={() => callEmergencyNumber('1930')}
-            style={styles.resourceButton}
-          />
-          <Button
-            title="📧 Report to cybercrime.gov.in"
-            variant="secondary"
-            onPress={() => openSafetyResource('https://cybercrime.gov.in')}
-            style={styles.resourceButton}
-          />
-          <Button
-            title="💳 Report Banking Fraud"
-            variant="secondary"
-            onPress={() => callEmergencyNumber('155260')}
-            style={styles.resourceButton}
-          />
+        <Text style={styles.cardTitle}>🛡️ Stay Safe Online</Text>
+        <View style={styles.tipsContainer}>
+          <Text style={styles.tip}>• Never share OTPs, passwords, or card details</Text>
+          <Text style={styles.tip}>• Banks never ask for sensitive info via calls/SMS</Text>
+          <Text style={styles.tip}>• Verify unknown contacts independently</Text>
+          <Text style={styles.tip}>• Be wary of "urgent" or "limited time" offers</Text>
+          <Text style={styles.tip}>• Check website URLs carefully before entering data</Text>
+          <Text style={styles.tip}>• Use official apps and websites only</Text>
         </View>
       </Card>
     </View>
@@ -284,76 +294,67 @@ const SafetyScreen: React.FC = () => {
 
   const renderFeesTab = (): JSX.Element => (
     <View>
-      {/* Fee Calculator */}
+      {/* Fee Category Selector */}
       <Card>
-        <Text style={styles.cardTitle}>💰 Fee Transparency Calculator</Text>
+        <Text style={styles.cardTitle}>💰 Fee Transparency</Text>
         <Text style={styles.subtitle}>
-          Understand common fees for financial products
+          Know the common fees before you sign up
         </Text>
         
         <View style={styles.categorySelector}>
-          <Text style={styles.label}>Select Category:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {(Object.keys(COMMON_FEES) as FeeCategory[]).map(category => (
-              <Button
-                key={category}
-                title={category}
-                variant={selectedFeeCategory === category ? 'primary' : 'secondary'}
-                onPress={() => selectFeeCategory(category)}
-                style={styles.categoryButton}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.feesContainer}>
-          {Object.entries(COMMON_FEES[selectedFeeCategory]).map(([feeName, feeData]) => (
-            <View key={feeName} style={styles.feeItem}>
-              <View style={styles.feeHeader}>
-                <Text style={styles.feeName}>{feeName}</Text>
-                <Text style={styles.feeRange}>
-                  {typeof feeData.min === 'string' ? feeData.min : `₹${feeData.min}`} - {' '}
-                  {typeof feeData.max === 'string' ? feeData.max : `₹${feeData.max}`}
-                </Text>
-              </View>
-              <Text style={styles.feeDescription}>{feeData.description}</Text>
-            </View>
+          {Object.keys(COMMON_FEES).map(category => (
+            <Button
+              key={category}
+              title={category}
+              variant={selectedFeeCategory === category ? 'primary' : 'secondary'}
+              onPress={() => selectFeeCategory(category as FeeCategory)}
+              style={styles.categoryButton}
+            />
           ))}
         </View>
       </Card>
 
-      {/* Fee Avoidance Tips */}
+      {/* Fee Details */}
       <Card>
-        <Text style={styles.cardTitle}>💡 How to Avoid Unnecessary Fees</Text>
-        <View style={styles.tipsList}>
+        <Text style={styles.cardTitle}>{selectedFeeCategory} Fees</Text>
+        <View style={styles.feesList}>
+          {Object.entries(COMMON_FEES[selectedFeeCategory]).map(([feeName, feeData]) => (
+            <View key={feeName} style={styles.feeItem}>
+              <Text style={styles.feeName}>{feeName}</Text>
+              <Text style={styles.feeAmount}>
+                ₹{feeData.min} - ₹{feeData.max}
+              </Text>
+              <Text style={styles.feeDescription}>{feeData.description}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.feeAdviceContainer}>
+          <Text style={styles.feeAdviceTitle}>💡 Pro Tips:</Text>
           {selectedFeeCategory === 'Credit Card' && (
             <>
-              <Text style={styles.tip}>• Pay full amount before due date to avoid interest</Text>
-              <Text style={styles.tip}>• Choose cards with no annual fee or fee waivers</Text>
-              <Text style={styles.tip}>• Avoid cash advances - use debit card instead</Text>
-              <Text style={styles.tip}>• Set up auto-pay to avoid late payment fees</Text>
+              <Text style={styles.tip}>• Look for lifetime free cards to avoid annual fees</Text>
+              <Text style={styles.tip}>• Pay bills on time to avoid late payment charges</Text>
+              <Text style={styles.tip}>• Use credit cards wisely to stay within limits</Text>
             </>
           )}
           {selectedFeeCategory === 'Bank Account' && (
             <>
-              <Text style={styles.tip}>• Maintain minimum balance to avoid penalties</Text>
-              <Text style={styles.tip}>• Use your bank's ATMs to avoid withdrawal fees</Text>
-              <Text style={styles.tip}>• Opt for digital statements to save on postage</Text>
-              <Text style={styles.tip}>• Choose zero-balance accounts if eligible</Text>
+              <Text style={styles.tip}>• Maintain minimum balance to avoid charges</Text>
+              <Text style={styles.tip}>• Use your bank's ATMs to avoid extra fees</Text>
+              <Text style={styles.tip}>• Consider zero-balance accounts if available</Text>
             </>
           )}
           {selectedFeeCategory === 'Investment' && (
             <>
               <Text style={styles.tip}>• Compare expense ratios before investing</Text>
-              <Text style={styles.tip}>• Hold investments long-term to avoid exit loads</Text>
-              <Text style={styles.tip}>• Use direct plans to save on distributor fees</Text>
-              <Text style={styles.tip}>• Consider low-cost index funds</Text>
+              <Text style={styles.tip}>• Look for direct plans to save on commissions</Text>
+              <Text style={styles.tip}>• Understand exit loads before early withdrawal</Text>
             </>
           )}
           {selectedFeeCategory === 'Insurance' && (
             <>
-              <Text style={styles.tip}>• Compare premiums across multiple insurers</Text>
-              <Text style={styles.tip}>• Pay annually instead of monthly to save costs</Text>
+              <Text style={styles.tip}>• Buy term insurance early for lower premiums</Text>
               <Text style={styles.tip}>• Avoid unnecessary riders you don't need</Text>
               <Text style={styles.tip}>• Read policy terms carefully before buying</Text>
             </>
@@ -442,6 +443,10 @@ const styles = StyleSheet.create({
   checkButton: {
     marginTop: 16,
   },
+  clearButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
   resultBox: {
     marginTop: 16,
     padding: 12,
@@ -468,21 +473,17 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 4,
   },
-  pattern: {
+  patternItem: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#ef4444',
+    marginLeft: 8,
     marginBottom: 2,
-  },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minHeight: 32,
   },
   alertItem: {
     marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    padding: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
   },
   alertHeader: {
     flexDirection: 'row',
@@ -493,68 +494,96 @@ const styles = StyleSheet.create({
   alertRisk: {
     fontSize: 12,
     fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   alertDate: {
     fontSize: 10,
     color: '#9ca3af',
   },
   alertText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#374151',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   alertUrl: {
-    fontSize: 12,
+    fontSize: 10,
+    color: '#2563eb',
+    marginBottom: 4,
+  },
+  alertScore: {
+    fontSize: 10,
     color: '#6b7280',
-    fontStyle: 'italic',
   },
-  categorySelector: {
-    marginBottom: 16,
+  emergencyContainer: {
+    gap: 8,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+  emergencyButton: {
     marginBottom: 8,
   },
-  categoryButton: {
-    marginRight: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  categorySelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  feesContainer: {
-    marginTop: 8,
+  categoryButton: {
+    flex: 0.48,
+    marginBottom: 8,
+  },
+  feesList: {
+    marginBottom: 16,
   },
   feeItem: {
     marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  feeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2563eb',
   },
   feeName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
-    flex: 1,
+    color: '#1f2937',
+    marginBottom: 4,
   },
-  feeRange: {
-    fontSize: 12,
+  feeAmount: {
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#2563eb',
+    color: '#dc2626',
+    marginBottom: 4,
   },
   feeDescription: {
     fontSize: 12,
     color: '#6b7280',
-    lineHeight: 16,
   },
-  tipsList: {
-    marginTop: 8,
+  feeAdviceContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 8,
+  },
+  feeAdviceTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#047857',
+    marginBottom: 8,
+  },
+  warningContainer: {
+    padding: 12,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f59e0b',
+  },
+  warningText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8,
+  },
+  tipsContainer: {
+    paddingLeft: 8,
   },
   tip: {
     fontSize: 14,
@@ -562,30 +591,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 20,
   },
-  resourcesList: {
-    marginTop: 8,
-  },
-  resourceButton: {
-    marginBottom: 8,
-  },
-  warningContainer: {
-    backgroundColor: '#fef3c7',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#f59e0b',
-  },
-  warningText: {
-    fontSize: 14,
-    color: '#92400e',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
   emptyText: {
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
     fontStyle: 'italic',
+    marginTop: 12,
   },
 });
 

@@ -1,4 +1,3 @@
-// src/screens/SpendingScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,8 +7,9 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Card, Button, Input } from '../components/UI';
+import { Card, Button, Input, CurrencyInput, DateInput } from '../components/UI';
 import { expenseStorage, budgetStorage } from '../utils/storage';
+import { formatINR, getNumericValue } from '../utils/currency';
 import type { 
   Expense, 
   BudgetCollection, 
@@ -24,13 +24,15 @@ const SpendingScreen: React.FC = () => {
   const [budgets, setBudgets] = useState<BudgetCollection>({});
   const [showAddExpense, setShowAddExpense] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [showSetBudget, setShowSetBudget] = useState<string | null>(null);
+  const [budgetAmount, setBudgetAmount] = useState<string>('');
   
   // New expense form state
   const [newExpense, setNewExpense] = useState<ExpenseFormData>({
     amount: '',
     category: 'Food & Dining',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
   });
 
   useEffect(() => {
@@ -57,10 +59,15 @@ const SpendingScreen: React.FC = () => {
   };
 
   const addExpense = async (): Promise<void> => {
-    const amount = parseFloat(newExpense.amount);
+    const amount = getNumericValue(newExpense.amount);
     
     if (!newExpense.amount || amount <= 0) {
       Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    if (!newExpense.date) {
+      Alert.alert('Error', 'Please select a date');
       return;
     }
 
@@ -88,6 +95,26 @@ const SpendingScreen: React.FC = () => {
     }
   };
 
+  const setBudgetForCategory = async (): Promise<void> => {
+    if (!showSetBudget) return;
+    
+    const amount = getNumericValue(budgetAmount);
+    if (amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid budget amount');
+      return;
+    }
+
+    try {
+      await budgetStorage.set(showSetBudget, amount);
+      await loadData();
+      setShowSetBudget(null);
+      setBudgetAmount('');
+      Alert.alert('Success', 'Budget updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to set budget');
+    }
+  };
+
   const checkBudgetAlert = (category: ExpenseCategory, amount: number): void => {
     const budget = budgets[category];
     if (!budget) return;
@@ -95,92 +122,84 @@ const SpendingScreen: React.FC = () => {
     // Calculate total spent in category this month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyExpenses = expenses.filter(exp => 
-      exp.category === category && 
-      new Date(exp.date) >= startOfMonth
-    );
-    
+    const monthlyExpenses = expenses.filter(exp => {
+      const expDate = new Date(exp.date);
+      return exp.category === category && 
+             expDate >= startOfMonth && 
+             expDate <= now;
+    });
+
     const totalSpent = monthlyExpenses.reduce((sum, exp) => sum + exp.amount, 0) + amount;
     const percentage = (totalSpent / budget.amount) * 100;
 
-    if (percentage >= 90) {
-      Alert.alert(
-        '🚨 Budget Alert',
-        `You've spent ${percentage.toFixed(1)}% of your ${category} budget this month!`
-      );
-    } else if (percentage >= 70) {
-      Alert.alert(
-        '⚠️ Budget Warning',
-        `You've spent ${percentage.toFixed(1)}% of your ${category} budget this month.`
-      );
+    if (percentage >= 80) {
+      const message = percentage >= 100 
+        ? `⚠️ Budget exceeded! You've spent ${formatINR(totalSpent)} out of ${formatINR(budget.amount)} budget for ${category}.`
+        : `⚠️ Budget alert! You've used ${Math.round(percentage)}% of your ${category} budget (${formatINR(totalSpent)}/${formatINR(budget.amount)}).`;
+      
+      Alert.alert('Budget Alert', message);
     }
   };
 
-  const getBudgetStatus = (category: string): BudgetStatus | null => {
-    const budget = budgets[category];
-    if (!budget) return null;
-
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyExpenses = expenses.filter(exp => 
-      exp.category === category && 
-      new Date(exp.date) >= startOfMonth
-    );
-    
-    const totalSpent = monthlyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const percentage = (totalSpent / budget.amount) * 100;
-
-    return {
-      spent: totalSpent,
-      budget: budget.amount,
-      percentage: Math.min(percentage, 100),
-      status: percentage >= 90 ? 'danger' : percentage >= 70 ? 'warning' : 'good'
-    };
-  };
-
-  const getRecentExpenses = (): Expense[] => {
-    return expenses.slice(0, 5);
-  };
-
-  const getTotalThisMonth = (): number => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    return expenses
-      .filter(exp => new Date(exp.date) >= startOfMonth)
-      .reduce((sum, exp) => sum + exp.amount, 0);
-  };
-
-  const getMonthlyTransactionCount = (): number => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    return expenses.filter(exp => new Date(exp.date) >= startOfMonth).length;
-  };
-
-  const updateNewExpense = (field: keyof ExpenseFormData) => (value: string): void => {
+  const updateNewExpense = (field: keyof ExpenseFormData) => (value: string) => {
     setNewExpense(prev => ({ ...prev, [field]: value }));
   };
 
-  const selectCategory = (category: ExpenseCategory): void => {
+  const selectCategory = (category: ExpenseCategory) => {
     setNewExpense(prev => ({ ...prev, category }));
+  };
+
+  const calculateBudgetStatus = (category: string): BudgetStatus => {
+    const budget = budgets[category];
+    if (!budget) return { spent: 0, budget: 0, percentage: 0, status: 'good' };
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthlyExpenses = expenses.filter(exp => {
+      const expDate = new Date(exp.date);
+      return exp.category === category && 
+             expDate >= startOfMonth && 
+             expDate <= now;
+    });
+
+    const spent = monthlyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const percentage = (spent / budget.amount) * 100;
+    const status = percentage >= 90 ? 'danger' : percentage >= 70 ? 'warning' : 'good';
+
+    return { spent, budget: budget.amount, percentage, status };
+  };
+
+  const calculateMonthlyTotal = (): number => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    return expenses
+      .filter(exp => {
+        const expDate = new Date(exp.date);
+        return expDate >= startOfMonth && expDate <= now;
+      })
+      .reduce((sum, exp) => sum + exp.amount, 0);
   };
 
   return (
     <ScrollView 
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      style={styles.container} 
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
     >
-      {/* Monthly Summary */}
+      {/* Total Spent This Month */}
       <Card>
-        <Text style={styles.cardTitle}>This Month's Spending</Text>
-        <Text style={styles.totalAmount}>₹{getTotalThisMonth().toLocaleString('en-IN')}</Text>
-        <Text style={styles.subtitle}>
-          {getMonthlyTransactionCount()} transactions
+        <Text style={styles.cardTitle}>💰 This Month</Text>
+        <Text style={styles.totalAmount}>
+          {formatINR(calculateMonthlyTotal())}
         </Text>
+        <Text style={styles.subtitle}>Total Expenses</Text>
       </Card>
 
-      {/* Quick Add Expense */}
+      {/* Add Expense Form */}
       <Card>
-        <Text style={styles.cardTitle}>Quick Add Expense</Text>
+        <Text style={styles.cardTitle}>✏️ Add Expense</Text>
         {!showAddExpense ? (
           <Button 
             title="+ Add New Expense" 
@@ -188,12 +207,12 @@ const SpendingScreen: React.FC = () => {
           />
         ) : (
           <View>
-            <Input
-              label="Amount (₹)"
+            <CurrencyInput
+              label="Amount"
               value={newExpense.amount}
               onChangeText={updateNewExpense('amount')}
-              placeholder="0"
-              keyboardType="numeric"
+              placeholder="1,000"
+              currency="₹"
             />
             
             <View style={styles.categoryContainer}>
@@ -218,6 +237,14 @@ const SpendingScreen: React.FC = () => {
               placeholder="What did you buy?"
             />
 
+            <DateInput
+              label="Date"
+              value={newExpense.date}
+              onChangeDate={updateNewExpense('date')}
+              placeholder="Select date"
+              maximumDate={new Date()} // Can't select future dates for expenses
+            />
+
             <View style={styles.buttonRow}>
               <Button 
                 title="Cancel" 
@@ -237,60 +264,102 @@ const SpendingScreen: React.FC = () => {
 
       {/* Budget Status */}
       <Card>
-        <Text style={styles.cardTitle}>Budget Status</Text>
+        <Text style={styles.cardTitle}>📊 Budget Status</Text>
         {Object.keys(budgets).length > 0 ? (
           Object.entries(budgets).map(([category, budget]) => {
-            const status = getBudgetStatus(category);
-            if (!status) return null;
-            
+            const status = calculateBudgetStatus(category);
             return (
               <View key={category} style={styles.budgetItem}>
                 <View style={styles.budgetHeader}>
                   <Text style={styles.budgetCategory}>{category}</Text>
                   <Text style={styles.budgetAmount}>
-                    ₹{status.spent.toLocaleString('en-IN')} / ₹{status.budget.toLocaleString('en-IN')}
+                    {formatINR(status.spent)} / {formatINR(status.budget)}
                   </Text>
                 </View>
                 <View style={styles.progressBar}>
                   <View 
                     style={[
-                      styles.progressFill, 
-                      { width: `${status.percentage}%` },
-                      styles[`progress${status.status}`]
+                      styles.progressFill,
+                      styles[`progress${status.status}` as keyof typeof styles],
+                      { width: `${Math.min(status.percentage, 100)}%` }
                     ]} 
                   />
                 </View>
-                <Text style={[styles.budgetPercentage, styles[`text${status.status}`]]}>
-                  {status.percentage.toFixed(1)}% used
+                <Text style={[
+                  styles.budgetPercentage,
+                  styles[`text${status.status}` as keyof typeof styles]
+                ]}>
+                  {Math.round(status.percentage)}% used
                 </Text>
               </View>
             );
           })
         ) : (
-          <Text style={styles.emptyText}>No budgets set. Set budgets to track your spending!</Text>
+          <View>
+            <Text style={styles.emptyText}>No budgets set yet.</Text>
+            <Button
+              title="+ Set Your First Budget"
+              onPress={() => {
+                setShowSetBudget(EXPENSE_CATEGORIES[0]);
+                setBudgetAmount('');
+              }}
+              style={styles.setBudgetButton}
+            />
+          </View>
+        )}
+
+        {showSetBudget && (
+          <View style={styles.setBudgetForm}>
+            <Text style={styles.setBudgetTitle}>Set Budget for {showSetBudget}</Text>
+            <CurrencyInput
+              label="Monthly Budget Amount"
+              value={budgetAmount}
+              onChangeText={setBudgetAmount}
+              placeholder="5,000"
+              currency="₹"
+            />
+            <View style={styles.buttonRow}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                onPress={() => setShowSetBudget(null)}
+                style={styles.halfButton}
+              />
+              <Button
+                title="Set Budget"
+                onPress={setBudgetForCategory}
+                style={styles.halfButton}
+              />
+            </View>
+          </View>
         )}
       </Card>
 
       {/* Recent Expenses */}
       <Card>
-        <Text style={styles.cardTitle}>Recent Expenses</Text>
-        {getRecentExpenses().length > 0 ? (
-          getRecentExpenses().map(expense => (
-            <View key={expense.id} style={styles.expenseItem}>
-              <View style={styles.expenseDetails}>
-                <Text style={styles.expenseCategory}>{expense.category}</Text>
-                <Text style={styles.expenseDescription}>
-                  {expense.description || 'No description'}
-                </Text>
-                <Text style={styles.expenseDate}>
-                  {new Date(expense.date).toLocaleDateString('en-IN')}
-                </Text>
-              </View>
-              <Text style={styles.expenseAmount}>₹{expense.amount.toLocaleString('en-IN')}</Text>
+        <Text style={styles.cardTitle}>📝 Recent Expenses</Text>
+        {expenses.slice(0, 10).map(expense => (
+          <View key={expense.id} style={styles.expenseItem}>
+            <View style={styles.expenseDetails}>
+              <Text style={styles.expenseCategory}>{expense.category}</Text>
+              {expense.description && (
+                <Text style={styles.expenseDescription}>{expense.description}</Text>
+              )}
+              <Text style={styles.expenseDate}>
+                {new Date(expense.date).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                })}
+              </Text>
             </View>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No expenses yet. Add your first expense above!</Text>
+            <Text style={styles.expenseAmount}>
+              {formatINR(expense.amount)}
+            </Text>
+          </View>
+        ))}
+        {expenses.length === 0 && (
+          <Text style={styles.emptyText}>Add your first expense above!</Text>
         )}
       </Card>
     </ScrollView>
@@ -391,6 +460,21 @@ const styles = StyleSheet.create({
   },
   textdanger: {
     color: '#ef4444',
+  },
+  setBudgetButton: {
+    marginTop: 12,
+  },
+  setBudgetForm: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+  },
+  setBudgetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
   },
   expenseItem: {
     flexDirection: 'row',

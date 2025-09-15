@@ -8,8 +8,9 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Card, Button, Input } from '../components/UI';
+import { Card, Button, Input, CurrencyInput, DateInput } from '../components/UI';
 import { emergencyFundStorage, savingsGoalStorage } from '../utils/storage';
+import { formatINR, getNumericValue } from '../utils/currency';
 import type { 
   EmergencyFund, 
   SavingsGoal, 
@@ -66,8 +67,8 @@ const SavingScreen: React.FC = () => {
   };
 
   const updateEmergencyFund = async (): Promise<void> => {
-    const target = parseFloat(emergencyEdit.target);
-    const current = parseFloat(emergencyEdit.current);
+    const target = getNumericValue(emergencyEdit.target);
+    const current = getNumericValue(emergencyEdit.current);
 
     if (isNaN(target) || target < 0) {
       Alert.alert('Error', 'Please enter a valid target amount');
@@ -93,8 +94,8 @@ const SavingScreen: React.FC = () => {
   };
 
   const addSavingsGoal = async (): Promise<void> => {
-    const target = parseFloat(newGoal.target);
-    const current = parseFloat(newGoal.current || '0');
+    const target = getNumericValue(newGoal.target);
+    const current = getNumericValue(newGoal.current);
 
     if (!newGoal.name.trim()) {
       Alert.alert('Error', 'Please enter a goal name');
@@ -111,14 +112,26 @@ const SavingScreen: React.FC = () => {
       return;
     }
 
+    // Validate target date if provided
+    if (newGoal.targetDate) {
+      const targetDate = new Date(newGoal.targetDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to compare only dates
+      
+      if (targetDate < today) {
+        Alert.alert('Error', 'Target date cannot be in the past');
+        return;
+      }
+    }
+
     try {
       const goal = await savingsGoalStorage.add({
-        name: newGoal.name.trim(),
+        name: newGoal.name,
         target,
         current,
         targetDate: newGoal.targetDate || undefined,
       });
-      
+
       setSavingsGoals(prev => [...prev, goal]);
       setNewGoal({
         name: '',
@@ -133,27 +146,12 @@ const SavingScreen: React.FC = () => {
     }
   };
 
-  const updateGoalProgress = async (goalId: string, newAmount: string): Promise<void> => {
-    const amount = parseFloat(newAmount);
-    if (isNaN(amount) || amount < 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-
+  const updateGoalProgress = async (goalId: string, newAmount: number): Promise<void> => {
     try {
-      const updated = await savingsGoalStorage.update(goalId, { current: amount });
-      if (updated) {
-        setSavingsGoals(prev => 
-          prev.map(goal => goal.id === goalId ? updated : goal)
-        );
-        
-        // Check if goal is completed
-        if (amount >= updated.target) {
-          Alert.alert('🎉 Congratulations!', `You've reached your "${updated.name}" savings goal!`);
-        }
-      }
+      await savingsGoalStorage.updateProgress(goalId, newAmount);
+      await loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to update savings goal');
+      Alert.alert('Error', 'Failed to update goal progress');
     }
   };
 
@@ -171,7 +169,7 @@ const SavingScreen: React.FC = () => {
               await savingsGoalStorage.delete(goalId);
               setSavingsGoals(prev => prev.filter(goal => goal.id !== goalId));
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete savings goal');
+              Alert.alert('Error', 'Failed to delete goal');
             }
           },
         },
@@ -179,26 +177,35 @@ const SavingScreen: React.FC = () => {
     );
   };
 
+  const updateNewGoal = (field: keyof SavingsGoalFormData) => (value: string) => {
+    setNewGoal(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateEmergencyEdit = (field: keyof EmergencyFundFormData) => (value: string) => {
+    setEmergencyEdit(prev => ({ ...prev, [field]: value }));
+  };
+
   const getEmergencyFundProgress = (): number => {
     if (emergencyFund.target === 0) return 0;
     return Math.min((emergencyFund.current / emergencyFund.target) * 100, 100);
   };
 
-  const getGoalProgress = (goal: SavingsGoal): number => {
-    if (goal.target === 0) return 0;
+  const getSavingsGoalProgress = (goal: SavingsGoal): number => {
     return Math.min((goal.current / goal.target) * 100, 100);
   };
 
   const getDaysToTarget = (targetDate?: string): number | null => {
     if (!targetDate) return null;
+    
     const today = new Date();
     const target = new Date(targetDate);
     const diffTime = target.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
     return diffDays;
   };
 
-  const startEditEmergency = (): void => {
+  const handleEditEmergency = (): void => {
     setEmergencyEdit({
       target: emergencyFund.target.toString(),
       current: emergencyFund.current.toString(),
@@ -206,32 +213,36 @@ const SavingScreen: React.FC = () => {
     setShowEditEmergency(true);
   };
 
-  const updateEmergencyEdit = (field: keyof EmergencyFundFormData) => (value: string): void => {
-    setEmergencyEdit(prev => ({ ...prev, [field]: value }));
-  };
-
-  const updateNewGoal = (field: keyof SavingsGoalFormData) => (value: string): void => {
-    setNewGoal(prev => ({ ...prev, [field]: value }));
-  };
-
   const promptUpdateGoal = (goal: SavingsGoal): void => {
     Alert.prompt(
-      'Update Goal',
+      'Update Progress',
       `Enter new amount for ${goal.name}:`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Update', 
-          onPress: (amount) => {
-            if (amount) {
-              updateGoalProgress(goal.id, amount);
+        {
+          text: 'Update',
+          onPress: (value) => {
+            if (value) {
+              const amount = getNumericValue(value);
+              if (!isNaN(amount) && amount >= 0) {
+                updateGoalProgress(goal.id, amount);
+              } else {
+                Alert.alert('Error', 'Please enter a valid amount');
+              }
             }
-          }
-        }
+          },
+        },
       ],
       'plain-text',
-      goal.current.toString()
+      formatINR(goal.current)
     );
+  };
+
+  // Get minimum date for target date (tomorrow)
+  const getMinimumTargetDate = (): Date => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow;
   };
 
   return (
@@ -246,30 +257,35 @@ const SavingScreen: React.FC = () => {
           <Button
             title="Edit"
             variant="secondary"
-            onPress={startEditEmergency}
+            onPress={handleEditEmergency}
             style={styles.editButton}
           />
         </View>
         
         {!showEditEmergency ? (
           <View>
-            <View style={styles.fundProgress}>
-              <Text style={styles.fundAmount}>
-                ₹{emergencyFund.current.toLocaleString('en-IN')} / ₹{emergencyFund.target.toLocaleString('en-IN')}
-              </Text>
-              <Text style={styles.fundPercentage}>
-                {getEmergencyFundProgress().toFixed(1)}% complete
-              </Text>
-            </View>
+            <Text style={styles.fundAmount}>
+              {formatINR(emergencyFund.current)}
+            </Text>
+            <Text style={styles.fundTarget}>
+              Goal: {formatINR(emergencyFund.target)}
+            </Text>
             
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: `${getEmergencyFundProgress()}%` },
-                  getEmergencyFundProgress() >= 100 ? styles.progressComplete : styles.progressPartial
-                ]} 
-              />
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill,
+                    getEmergencyFundProgress() >= 100 
+                      ? styles.progressComplete 
+                      : styles.progressPartial,
+                    { width: `${getEmergencyFundProgress()}%` }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {Math.round(getEmergencyFundProgress())}% Complete
+              </Text>
             </View>
             
             <Text style={styles.fundAdvice}>
@@ -283,20 +299,20 @@ const SavingScreen: React.FC = () => {
           </View>
         ) : (
           <View>
-            <Input
-              label="Target Amount (₹)"
+            <CurrencyInput
+              label="Target Amount"
               value={emergencyEdit.target}
               onChangeText={updateEmergencyEdit('target')}
-              placeholder="100000"
-              keyboardType="numeric"
+              placeholder="1,00,000"
+              currency="₹"
             />
             
-            <Input
-              label="Current Amount (₹)"
+            <CurrencyInput
+              label="Current Amount"
               value={emergencyEdit.current}
               onChangeText={updateEmergencyEdit('current')}
               placeholder="0"
-              keyboardType="numeric"
+              currency="₹"
             />
 
             <View style={styles.buttonRow}>
@@ -337,27 +353,28 @@ const SavingScreen: React.FC = () => {
               placeholder="Vacation, Car, House..."
             />
             
-            <Input
-              label="Target Amount (₹)"
+            <CurrencyInput
+              label="Target Amount"
               value={newGoal.target}
               onChangeText={updateNewGoal('target')}
-              placeholder="50000"
-              keyboardType="numeric"
+              placeholder="50,000"
+              currency="₹"
             />
             
-            <Input
-              label="Current Amount (₹)"
+            <CurrencyInput
+              label="Current Amount"
               value={newGoal.current}
               onChangeText={updateNewGoal('current')}
               placeholder="0"
-              keyboardType="numeric"
+              currency="₹"
             />
             
-            <Input
+            <DateInput
               label="Target Date (Optional)"
               value={newGoal.targetDate}
-              onChangeText={updateNewGoal('targetDate')}
-              placeholder="YYYY-MM-DD"
+              onChangeDate={updateNewGoal('targetDate')}
+              placeholder="Select target date"
+              minimumDate={getMinimumTargetDate()}
             />
 
             <View style={styles.buttonRow}>
@@ -377,70 +394,87 @@ const SavingScreen: React.FC = () => {
         )}
 
         {savingsGoals.length > 0 ? (
-          savingsGoals.map(goal => {
-            const progress = getGoalProgress(goal);
-            const daysToTarget = getDaysToTarget(goal.targetDate);
-            
-            return (
-              <View key={goal.id} style={styles.goalItem}>
-                <View style={styles.goalHeader}>
-                  <Text style={styles.goalName}>{goal.name}</Text>
-                  <Button
-                    title="×"
-                    variant="danger"
-                    onPress={() => deleteGoal(goal.id)}
-                    style={styles.deleteButton}
-                  />
-                </View>
-                
-                <View style={styles.goalProgress}>
+          <View>
+            {savingsGoals.map(goal => {
+              const progress = getSavingsGoalProgress(goal);
+              const daysToTarget = getDaysToTarget(goal.targetDate);
+              
+              return (
+                <View key={goal.id} style={styles.goalItem}>
+                  <View style={styles.goalHeader}>
+                    <Text style={styles.goalName}>{goal.name}</Text>
+                    <Button
+                      title="×"
+                      variant="danger"
+                      onPress={() => deleteGoal(goal.id)}
+                      style={styles.deleteButton}
+                    />
+                  </View>
+                  
                   <Text style={styles.goalAmount}>
-                    ₹{goal.current.toLocaleString('en-IN')} / ₹{goal.target.toLocaleString('en-IN')}
+                    {formatINR(goal.current)} / {formatINR(goal.target)}
                   </Text>
-                  <Text style={styles.goalPercentage}>
-                    {progress.toFixed(1)}% complete
-                  </Text>
-                </View>
-                
-                <View style={styles.progressBar}>
-                  <View 
-                    style={[
-                      styles.progressFill, 
-                      { width: `${progress}%` },
-                      progress >= 100 ? styles.progressComplete : styles.progressPartial
-                    ]} 
-                  />
-                </View>
-                
-                {goal.targetDate && (
-                  <Text style={styles.goalDate}>
-                    {daysToTarget !== null && (
-                      daysToTarget > 0 
-                        ? `${daysToTarget} days to target date`
-                        : daysToTarget === 0 
-                        ? "Target date is today!"
-                        : `${Math.abs(daysToTarget)} days past target date`
-                    )}
-                  </Text>
-                )}
-                
-                <View style={styles.goalActions}>
+                  
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBar}>
+                      <View 
+                        style={[
+                          styles.progressFill,
+                          progress >= 100 
+                            ? styles.progressComplete 
+                            : styles.progressPartial,
+                          { width: `${Math.min(progress, 100)}%` }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {Math.round(progress)}% Complete
+                    </Text>
+                  </View>
+
+                  {goal.targetDate && (
+                    <View style={styles.targetDateContainer}>
+                      <Text style={styles.targetDate}>
+                        Target: {new Date(goal.targetDate).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </Text>
+                      {daysToTarget !== null && (
+                        <Text style={[
+                          styles.daysRemaining,
+                          daysToTarget < 0 ? styles.overdue : 
+                          daysToTarget <= 30 ? styles.urgent : styles.normal
+                        ]}>
+                          {daysToTarget > 0 
+                            ? `${daysToTarget} days remaining`
+                            : daysToTarget === 0 
+                            ? "Target date is today!"
+                            : `${Math.abs(daysToTarget)} days overdue`
+                          }
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
                   <Button
                     title="Update Progress"
+                    variant="secondary"
                     onPress={() => promptUpdateGoal(goal)}
                     style={styles.updateButton}
                   />
+                  
+                  {progress >= 100 && (
+                    <Text style={styles.goalComplete}>🎉 Goal Completed!</Text>
+                  )}
                 </View>
-                
-                {progress >= 100 && (
-                  <Text style={styles.goalComplete}>🎉 Goal Completed!</Text>
-                )}
-              </View>
-            );
-          })
+              );
+            })}
+          </View>
         ) : (
           <Text style={styles.emptyText}>
-            No savings goals yet. Add your first goal to start tracking your progress!
+            No savings goals yet. Add your first goal above!
           </Text>
         )}
       </Card>
@@ -448,12 +482,13 @@ const SavingScreen: React.FC = () => {
       {/* Savings Tips */}
       <Card>
         <Text style={styles.cardTitle}>💡 Savings Tips</Text>
-        <View style={styles.tipsList}>
-          <Text style={styles.tip}>• Automate your savings - Set up automatic transfers</Text>
-          <Text style={styles.tip}>• Use the 50/30/20 rule - 50% needs, 30% wants, 20% savings</Text>
-          <Text style={styles.tip}>• Start small - Even ₹100/month adds up over time</Text>
-          <Text style={styles.tip}>• Track your progress - Regular monitoring keeps you motivated</Text>
-          <Text style={styles.tip}>• Emergency fund first - Aim for 3-6 months of expenses</Text>
+        <View style={styles.tipsContainer}>
+          <Text style={styles.tip}>• Set up automatic transfers to your savings account</Text>
+          <Text style={styles.tip}>• Use the 50/30/20 rule: 50% needs, 30% wants, 20% savings</Text>
+          <Text style={styles.tip}>• Review and reduce unnecessary subscriptions monthly</Text>
+          <Text style={styles.tip}>• Consider high-yield savings accounts for better returns</Text>
+          <Text style={styles.tip}>• Track your progress regularly to stay motivated</Text>
+          <Text style={styles.tip}>• Set realistic target dates to maintain motivation</Text>
         </View>
       </Card>
     </ScrollView>
@@ -480,43 +515,53 @@ const styles = StyleSheet.create({
   editButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    minHeight: 32,
-  },
-  fundProgress: {
-    alignItems: 'center',
-    marginBottom: 12,
   },
   fundAmount: {
-    fontSize: 20,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#2563eb',
+    color: '#10b981',
+    textAlign: 'center',
   },
-  fundPercentage: {
+  fundTarget: {
     fontSize: 14,
     color: '#6b7280',
+    textAlign: 'center',
     marginTop: 4,
+  },
+  progressContainer: {
+    marginVertical: 16,
   },
   progressBar: {
     height: 12,
     backgroundColor: '#e5e7eb',
     borderRadius: 6,
-    marginVertical: 8,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
     borderRadius: 6,
   },
   progressPartial: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#f59e0b',
   },
   progressComplete: {
     backgroundColor: '#10b981',
   },
-  fundAdvice: {
-    fontSize: 14,
+  progressText: {
+    fontSize: 12,
     color: '#6b7280',
     textAlign: 'center',
+    fontWeight: '600',
+  },
+  fundAdvice: {
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'center',
     fontStyle: 'italic',
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -528,15 +573,17 @@ const styles = StyleSheet.create({
   },
   addGoalForm: {
     marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    padding: 16,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
   },
   goalItem: {
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   goalHeader: {
     flexDirection: 'row',
@@ -547,43 +594,45 @@ const styles = StyleSheet.create({
   goalName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: '#1f2937',
     flex: 1,
   },
   deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     paddingHorizontal: 0,
-    minHeight: 32,
-  },
-  goalProgress: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    paddingVertical: 0,
   },
   goalAmount: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  goalPercentage: {
-    fontSize: 12,
     color: '#6b7280',
+    marginBottom: 8,
   },
-  goalDate: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  goalActions: {
+  targetDateContainer: {
     marginTop: 8,
+    marginBottom: 8,
+  },
+  targetDate: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  daysRemaining: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  normal: {
+    color: '#10b981',
+  },
+  urgent: {
+    color: '#f59e0b',
+  },
+  overdue: {
+    color: '#ef4444',
   },
   updateButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 40,
+    marginTop: 12,
   },
   goalComplete: {
     fontSize: 14,
@@ -591,15 +640,19 @@ const styles = StyleSheet.create({
     color: '#10b981',
     textAlign: 'center',
     marginTop: 8,
+    padding: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 6,
   },
   emptyText: {
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
     fontStyle: 'italic',
+    marginTop: 12,
   },
-  tipsList: {
-    marginTop: 8,
+  tipsContainer: {
+    paddingLeft: 8,
   },
   tip: {
     fontSize: 14,
