@@ -13,6 +13,7 @@ import {
   connectAuthEmulator
 } from 'firebase/auth';
 
+
 // Firebase configuration - replace with your actual config
 const firebaseConfig = {
   apiKey: "AIzaSyB_3-STlBfHKjxOyQMXARtp_XUYqs5ZfQY",

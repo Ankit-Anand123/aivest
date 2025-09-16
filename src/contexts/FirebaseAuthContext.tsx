@@ -177,7 +177,7 @@ export const FirebaseAuthProvider: React.FC<FirebaseAuthProviderProps> = ({ chil
           email: firebaseUser.email || '',
           firstName: firebaseUser.displayName?.split(' ')[0] || '',
           lastName: firebaseUser.displayName?.split(' ')[1] || '',
-          profilePicture: firebaseUser.photoURL || undefined,
+          profilePicture: firebaseUser.photoURL || null,
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
           preferences: createDefaultPreferences(),
