@@ -1,3 +1,4 @@
+// src/contexts/FirebaseAuthContext.tsx
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { 
   createUserWithEmailAndPassword,
@@ -5,7 +6,10 @@ import {
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
-  updateProfile
+  updateProfile as updateFirebaseProfile,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseService';
@@ -22,7 +26,7 @@ import {
   clearAllAuthData 
 } from '../utils/authStorage';
 
-// Create default preferences function (if not in authStorage)
+// Create default preferences function
 const createDefaultPreferences = (): UserPreferences => ({
   currency: 'INR',
   language: 'en',
@@ -59,6 +63,7 @@ interface FirebaseAuthContextType extends AuthState {
   // Profile Management
   updateProfile: (updates: Partial<User>) => Promise<boolean>;
   updatePreferences: (preferences: Partial<UserPreferences>) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   
   // Firebase User
   firebaseUser: FirebaseUser | null;
@@ -177,7 +182,8 @@ export const FirebaseAuthProvider: React.FC<FirebaseAuthProviderProps> = ({ chil
           email: firebaseUser.email || '',
           firstName: firebaseUser.displayName?.split(' ')[0] || '',
           lastName: firebaseUser.displayName?.split(' ')[1] || '',
-          profilePicture: firebaseUser.photoURL || null,
+          phone: '',
+          profilePicture: firebaseUser.photoURL || undefined,
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
           preferences: createDefaultPreferences(),
@@ -246,7 +252,7 @@ export const FirebaseAuthProvider: React.FC<FirebaseAuthProviderProps> = ({ chil
       const firebaseUser = userCredential.user;
 
       // Update Firebase profile with name
-      await updateProfile(firebaseUser, {
+      await updateFirebaseProfile(firebaseUser, {
         displayName: `${credentials.firstName} ${credentials.lastName}`
       });
 
@@ -371,6 +377,46 @@ export const FirebaseAuthProvider: React.FC<FirebaseAuthProviderProps> = ({ chil
     }
   };
 
+  // Change password
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+
+    try {
+      if (!state.firebaseUser) {
+        dispatch({ type: 'SET_ERROR', payload: 'No user logged in' });
+        return false;
+      }
+
+      // Re-authenticate user with current password
+      const credential = EmailAuthProvider.credential(state.firebaseUser.email!, currentPassword);
+      await reauthenticateWithCredential(state.firebaseUser, credential);
+
+      // Update password
+      await updatePassword(state.firebaseUser, newPassword);
+      
+      console.log('✅ Password updated successfully');
+      return true;
+
+    } catch (error: any) {
+      console.error('❌ Password change error:', error);
+      
+      let errorMessage = 'Failed to change password. Please try again.';
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Current password is incorrect.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'New password is too weak. Please use a stronger password.';
+      } else if (error.code === 'auth/requires-recent-login') {
+        errorMessage = 'Please log out and log back in, then try again.';
+      }
+
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      return false;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
   // Sync local data to cloud (for backup)
   const syncToCloud = async (): Promise<boolean> => {
     try {
@@ -433,6 +479,8 @@ export const FirebaseAuthProvider: React.FC<FirebaseAuthProviderProps> = ({ chil
     logout,
     updateProfile,
     updatePreferences,
+    changePassword, // NEW PASSWORD CHANGE METHOD
+    firebaseUser: state.firebaseUser,
     syncToCloud,
     restoreFromCloud,
     checkAuthStatus,

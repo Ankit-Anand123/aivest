@@ -100,6 +100,7 @@ export type RootTabParamList = {
   Spending: undefined;
   Saving: undefined;
   Safety: undefined;
+  Profile: undefined;
 };
 
 // Component Props Types

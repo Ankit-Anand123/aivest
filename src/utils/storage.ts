@@ -7,10 +7,11 @@ import type {
   EmergencyFund, 
   SavingsGoal, 
   ScamAlert,
-  StorageKeys,
   ExpenseCategory,
   StorageResponse
 } from '../types';
+
+import { StorageKeys } from '../types';
 
 // Generic storage functions
 export const storeData = async <T>(key: StorageKeys, value: T): Promise<boolean> => {

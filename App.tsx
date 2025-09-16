@@ -1,3 +1,4 @@
+// App.tsx - Updated with Profile Tab
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { AnalyticsService } from './src/services/analyticsService';
 import SpendingScreen from './src/screens/main/SpendingScreen';
 import SavingScreen from './src/screens/main/SavingScreen';
 import SafetyScreen from './src/screens/main/SafetyScreen';
+import ProfileScreen from './src/screens/settings/ProfileScreen';
 import LoginScreen, { SignUpScreen } from './src/screens/auth/LoginScreen';
 
 // Stack and Tab Navigators
@@ -28,10 +30,10 @@ const Stack = createNativeStackNavigator();
 // Auth Stack Navigator
 function AuthStack() {
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
-        animation: 'slide_from_right' 
+        animation: 'slide_from_right'
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
@@ -40,7 +42,7 @@ function AuthStack() {
   );
 }
 
-// Main Tab Navigator with Analytics Tracking
+// Main Tab Navigator with Analytics Tracking - UPDATED WITH PROFILE TAB
 function TabNavigator() {
   const insets = useSafeAreaInsets();
 
@@ -59,6 +61,8 @@ function TabNavigator() {
             iconName = focused ? 'trending-up' : 'trending-up-outline';
           } else if (route.name === 'Safety') {
             iconName = focused ? 'shield-checkmark' : 'shield-checkmark-outline';
+          } else if (route.name === 'Profile') { // NEW PROFILE ICON
+            iconName = focused ? 'person' : 'person-outline';
           } else {
             iconName = 'help-outline';
           }
@@ -82,17 +86,17 @@ function TabNavigator() {
         },
       }}
     >
-      <Tab.Screen 
-        name="Spending" 
+      <Tab.Screen
+        name="Spending"
         component={SpendingScreen}
         options={{
           title: 'Spending',
           headerTitle: '💰 Spending Tracker',
           headerRight: () => (
-            <Ionicons 
-              name="sync" 
-              size={24} 
-              color="#ffffff" 
+            <Ionicons
+              name="sync"
+              size={24}
+              color="#ffffff"
               style={{ marginRight: 15 }}
               onPress={async () => {
                 AnalyticsService.trackFeatureUsage('manual_sync');
@@ -105,17 +109,17 @@ function TabNavigator() {
           focus: () => AnalyticsService.trackScreenView('Spending'),
         }}
       />
-      <Tab.Screen 
-        name="Saving" 
+      <Tab.Screen
+        name="Saving"
         component={SavingScreen}
         options={{
           title: 'Saving',
           headerTitle: '🎯 Savings Goals',
           headerRight: () => (
-            <Ionicons 
-              name="cloud-upload" 
-              size={24} 
-              color="#ffffff" 
+            <Ionicons
+              name="cloud-upload"
+              size={24}
+              color="#ffffff"
               style={{ marginRight: 15 }}
               onPress={async () => {
                 AnalyticsService.trackFeatureUsage('manual_backup');
@@ -128,8 +132,8 @@ function TabNavigator() {
           focus: () => AnalyticsService.trackScreenView('Saving'),
         }}
       />
-      <Tab.Screen 
-        name="Safety" 
+      <Tab.Screen
+        name="Safety"
         component={SafetyScreen}
         options={{
           title: 'Safety',
@@ -137,6 +141,18 @@ function TabNavigator() {
         }}
         listeners={{
           focus: () => AnalyticsService.trackScreenView('Safety'),
+        }}
+      />
+      {/* NEW PROFILE TAB */}
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          title: 'Profile',
+          headerTitle: '👤 Profile & Settings'
+        }}
+        listeners={{
+          focus: () => AnalyticsService.trackScreenView('Profile'),
         }}
       />
     </Tab.Navigator>
@@ -160,10 +176,9 @@ function AppNavigator() {
 
       // Initialize analytics with user data (anonymous)
       await AnalyticsService.initializeAnalytics(user!.email, {
-        // Optional demographic data (you can collect this during signup)
         ageGroup: 'prefer_not_to_say',
         incomeRange: 'prefer_not_to_say',
-        location: { country: 'IN', state: 'Unknown' },
+        location: { country: 'IN', state: 'Tamil Nadu' },
         familySize: 1
       });
 
@@ -172,19 +187,32 @@ function AppNavigator() {
 
       // Check if user has cloud backup and offer to restore
       const hasBackup = await SecureBackupService.hasBackup(firebaseUser!.uid);
-      
+
       if (hasBackup) {
-        console.log('☁️ Cloud backup detected - you can restore your data');
-        // In a real app, you'd show a modal asking if user wants to restore
-        // For now, we'll auto-restore
-        const restored = await SecureBackupService.restoreFromCloud(
-          firebaseUser!.uid, 
-          user!.email
-        );
-        
-        if (restored) {
-          console.log('✅ Data restored from cloud backup');
+        console.log('☁️ Cloud backup detected');
+
+        // Get backup info first
+        const backupInfo = await SecureBackupService.getBackupInfo(firebaseUser!.uid);
+        console.log('📊 Backup info:', backupInfo);
+
+        // Attempt restore but don't fail if it doesn't work
+        try {
+          const restored = await SecureBackupService.restoreFromCloud(
+            firebaseUser!.uid,
+            user!.email
+          );
+
+          if (restored) {
+            console.log('✅ Data restored from cloud backup');
+          } else {
+            console.log('ℹ️ Restore completed but no data was changed');
+          }
+        } catch (restoreError) {
+          console.warn('⚠️ Backup restore failed, continuing with local data:', restoreError);
+          // Don't throw - just continue with local data
         }
+      } else {
+        console.log('ℹ️ No cloud backup found - starting fresh');
       }
 
       // Schedule auto-backup on data changes
@@ -194,17 +222,18 @@ function AppNavigator() {
 
     } catch (error) {
       console.error('❌ Error initializing user services:', error);
+      // Don't prevent app from working if services fail to initialize
     }
   };
 
   // Show loading spinner while checking auth status
   if (loading) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f8fafc' 
+        backgroundColor: '#f8fafc'
       }}>
         <ActivityIndicator size="large" color="#2563eb" />
         <View style={{ marginTop: 16 }}>
@@ -224,16 +253,16 @@ function AppNavigator() {
 
 // Main App Component with Complete Dual-Layer Architecture
 export default function App() {
-  
+
   // Initialize Firebase and test connection on app start
   useEffect(() => {
     const initializeAivest = async () => {
       try {
         console.log('🚀 Initializing Aivest with Dual-Layer Architecture...');
-        
+
         // Test Firebase connection
         const isConnected = await testFirebaseConnection();
-        
+
         if (isConnected) {
           console.log('✅ Firebase integration ready!');
           console.log('🔐 Secure backup system: Active');
