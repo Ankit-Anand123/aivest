@@ -7,17 +7,17 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Card, Button, Input, CurrencyInput, DateInput } from '../components/UI';
-import { expenseStorage, budgetStorage } from '../utils/storage';
-import { formatINR, getNumericValue } from '../utils/currency';
+import { Card, Button, Input, CurrencyInput, DateInput } from '../../components/UI';
+import { expenseStorage, budgetStorage } from '../../utils/storage';
+import { formatINR, getNumericValue } from '../../utils/currency';
 import type { 
   Expense, 
   BudgetCollection, 
   ExpenseFormData, 
   BudgetStatus, 
   ExpenseCategory 
-} from '../types';
-import { EXPENSE_CATEGORIES } from '../types';
+} from '../../types';
+import { EXPENSE_CATEGORIES } from '../../types';
 
 const SpendingScreen: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "413360700776",
+    "project_id": "aivest-9f926",
+    "storage_bucket": "aivest-9f926.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:413360700776:android:168e8b2e4da3fc15732add",
+        "android_client_info": {
+          "package_name": "com.aivest.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMHMnzq9X82mo16_9jlIJYDOC-iMvIaAg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

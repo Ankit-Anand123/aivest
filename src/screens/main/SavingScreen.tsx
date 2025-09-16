@@ -8,15 +8,15 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Card, Button, Input, CurrencyInput, DateInput } from '../components/UI';
-import { emergencyFundStorage, savingsGoalStorage } from '../utils/storage';
-import { formatINR, getNumericValue } from '../utils/currency';
+import { Card, Button, Input, CurrencyInput, DateInput } from '../../components/UI';
+import { emergencyFundStorage, savingsGoalStorage } from '../../utils/storage';
+import { formatINR, getNumericValue } from '../../utils/currency';
 import type { 
   EmergencyFund, 
   SavingsGoal, 
   EmergencyFundFormData, 
   SavingsGoalFormData 
-} from '../types';
+} from '../../types';
 
 const SavingScreen: React.FC = () => {
   const [emergencyFund, setEmergencyFund] = useState<EmergencyFund>({

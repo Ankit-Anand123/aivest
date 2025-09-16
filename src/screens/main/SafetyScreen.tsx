@@ -9,16 +9,16 @@ import {
   RefreshControl,
   Linking,
 } from 'react-native';
-import { Card, Button, Input } from '../components/UI';
-import { scamAlertStorage } from '../utils/storage';
-import { ScamAnalyzer } from '../utils/scamAnalyzer';
+import { Card, Button, Input } from '../../components/UI';
+import { scamAlertStorage } from '../../utils/storage';
+import { ScamAnalyzer } from '../../utils/scamAnalyzer';
 import type { 
   ScamAlert, 
   ScamCheckFormData, 
   FeeCategory, 
   ScamAnalysisResult 
-} from '../types';
-import { COMMON_FEES } from '../types';
+} from '../../types';
+import { COMMON_FEES } from '../../types';
 
 type SafetyTab = 'scam' | 'fees';
 
