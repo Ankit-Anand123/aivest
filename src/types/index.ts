@@ -23,6 +23,14 @@ export interface Budget {
   updatedAt: string; // ISO date string
 }
 
+export interface EnhancedBudget extends Budget {
+  category: ExpenseCategory;
+  monthlyLimit?: number;
+  weeklySpent?: number;
+  dailyAverage?: number;
+  lastUpdated: string;
+}
+
 export interface BudgetCollection {
   [category: string]: Budget;
 }
@@ -39,6 +47,8 @@ export interface SavingsGoal {
   target: number;
   current: number;
   targetDate?: string; // ISO date string
+  category?: 'Emergency Fund' | 'Short Term' | 'Long Term' | 'Investment';
+  priority?: 'High' | 'Medium' | 'Low';
   createdAt: string; // ISO date string
 }
 
@@ -67,6 +77,7 @@ export interface BudgetStatus {
   budget: number;
   percentage: number;
   status: 'good' | 'warning' | 'danger';
+  remaining: number;
 }
 
 export type FeeCategory = 'Credit Card' | 'Bank Account' | 'Investment' | 'Insurance';
@@ -167,6 +178,8 @@ export interface SavingsGoalFormData {
   target: string;
   current: string;
   targetDate: string;
+  category?: string;
+  priority?: string;
 }
 
 // Scam Detection Types
@@ -229,3 +242,10 @@ export const COMMON_FEES: FeesCollection = {
     'Surrender': { min: '1%', max: '10%', description: 'Fee for early policy termination' },
   }
 };
+
+export interface InlineEditState {
+  editingExpense: string | null;
+  editingGoal: string | null;
+  editingBudget: string | null;
+  editForm: Record<string, any>;
+}

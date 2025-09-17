@@ -77,13 +77,19 @@ export const expenseStorage = {
   },
 
   // Update expense
-  update: async (id: string, updatedExpense: Partial<Omit<Expense, 'id' | 'createdAt'>>): Promise<Expense | null> => {
+  update: async (id: string, updates: Partial<Omit<Expense, 'id' | 'createdAt'>>): Promise<Expense | null> => {
     const expenses = await expenseStorage.getAll();
     const index = expenses.findIndex(exp => exp.id === id);
+    
     if (index !== -1) {
-      expenses[index] = { ...expenses[index], ...updatedExpense };
+      const updatedExpense = { 
+        ...expenses[index], 
+        ...updates,
+        // Keep original createdAt, update other timestamp if needed
+      };
+      expenses[index] = updatedExpense;
       await storeData(StorageKeys.EXPENSES, expenses);
-      return expenses[index];
+      return updatedExpense;
     }
     return null;
   },
@@ -191,13 +197,19 @@ export const savingsGoalStorage = {
   },
 
   // Update savings goal
-  update: async (id: string, updatedGoal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>): Promise<SavingsGoal | null> => {
+  update: async (id: string, updates: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>): Promise<SavingsGoal | null> => {
     const goals = await savingsGoalStorage.getAll();
     const index = goals.findIndex(goal => goal.id === id);
+    
     if (index !== -1) {
-      goals[index] = { ...goals[index], ...updatedGoal };
+      const updatedGoal = { 
+        ...goals[index], 
+        ...updates,
+        // Keep original createdAt
+      };
+      goals[index] = updatedGoal;
       await storeData(StorageKeys.SAVINGS_GOALS, goals);
-      return goals[index];
+      return updatedGoal;
     }
     return null;
   },
@@ -208,6 +220,10 @@ export const savingsGoalStorage = {
     const filteredGoals = goals.filter(goal => goal.id !== id);
     await storeData(StorageKeys.SAVINGS_GOALS, filteredGoals);
     return true;
+  },
+
+  updateProgress: async (id: string, newCurrentAmount: number): Promise<SavingsGoal | null> => {
+    return await savingsGoalStorage.update(id, { current: Math.max(0, newCurrentAmount) });
   },
 };
 

@@ -1,4 +1,3 @@
-// src/screens/SavingScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,12 +10,14 @@ import {
 import { Card, Button, Input, CurrencyInput, DateInput } from '../../components/UI';
 import { emergencyFundStorage, savingsGoalStorage } from '../../utils/storage';
 import { formatINR, getNumericValue } from '../../utils/currency';
-import type { 
-  EmergencyFund, 
-  SavingsGoal, 
-  EmergencyFundFormData, 
-  SavingsGoalFormData 
+import type {
+  EmergencyFund,
+  SavingsGoal,
+  EmergencyFundFormData,
+  SavingsGoalFormData
 } from '../../types';
+import { TouchableOpacity, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 const SavingScreen: React.FC = () => {
   const [emergencyFund, setEmergencyFund] = useState<EmergencyFund>({
@@ -28,6 +29,18 @@ const SavingScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showAddGoal, setShowAddGoal] = useState<boolean>(false);
   const [showEditEmergency, setShowEditEmergency] = useState<boolean>(false);
+  const [editingGoal, setEditingGoal] = useState<string | null>(null);
+  const [goalEditForm, setGoalEditForm] = useState<SavingsGoalFormData & {
+    category: string;
+    priority: string;
+  }>({
+    name: '',
+    target: '',
+    current: '',
+    targetDate: '',
+    category: 'Short Term',
+    priority: 'Medium',
+  });
 
   // Emergency fund edit state
   const [emergencyEdit, setEmergencyEdit] = useState<EmergencyFundFormData>({
@@ -117,7 +130,7 @@ const SavingScreen: React.FC = () => {
       const targetDate = new Date(newGoal.targetDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Reset time to compare only dates
-      
+
       if (targetDate < today) {
         Alert.alert('Error', 'Target date cannot be in the past');
         return;
@@ -155,28 +168,6 @@ const SavingScreen: React.FC = () => {
     }
   };
 
-  const deleteGoal = async (goalId: string): Promise<void> => {
-    Alert.alert(
-      'Delete Goal',
-      'Are you sure you want to delete this savings goal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await savingsGoalStorage.delete(goalId);
-              setSavingsGoals(prev => prev.filter(goal => goal.id !== goalId));
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete goal');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const updateNewGoal = (field: keyof SavingsGoalFormData) => (value: string) => {
     setNewGoal(prev => ({ ...prev, [field]: value }));
   };
@@ -196,12 +187,12 @@ const SavingScreen: React.FC = () => {
 
   const getDaysToTarget = (targetDate?: string): number | null => {
     if (!targetDate) return null;
-    
+
     const today = new Date();
     const target = new Date(targetDate);
     const diffTime = target.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     return diffDays;
   };
 
@@ -245,8 +236,85 @@ const SavingScreen: React.FC = () => {
     return tomorrow;
   };
 
+  const startEditingGoal = (goal: SavingsGoal) => {
+    setEditingGoal(goal.id);
+    setGoalEditForm({
+      name: goal.name,
+      target: goal.target.toString(),
+      current: goal.current.toString(),
+      targetDate: goal.targetDate || '',
+      category: goal.category || 'Short Term',
+      priority: goal.priority || 'Medium',
+    });
+  };
+
+  const saveGoalEdit = async (id: string) => {
+    const target = getNumericValue(goalEditForm.target);
+    const current = getNumericValue(goalEditForm.current);
+
+    if (!goalEditForm.name.trim()) {
+      Alert.alert('Error', 'Please enter a goal name');
+      return;
+    }
+    if (target <= 0) {
+      Alert.alert('Error', 'Please enter a valid target amount');
+      return;
+    }
+
+    try {
+      await savingsGoalStorage.update(id, {
+        name: goalEditForm.name,
+        target,
+        current: Math.max(0, current),
+        targetDate: goalEditForm.targetDate || undefined,
+        category: goalEditForm.category as any,
+        priority: goalEditForm.priority as any,
+      });
+      await loadData();
+      setEditingGoal(null);
+      Alert.alert('Success', 'Goal updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update goal');
+    }
+  };
+
+  const cancelGoalEdit = () => {
+    setEditingGoal(null);
+    setGoalEditForm({
+      name: '',
+      target: '',
+      current: '',
+      targetDate: '',
+      category: 'Short Term',
+      priority: 'Medium',
+    });
+  };
+
+  const deleteGoal = async (id: string) => {
+    Alert.alert(
+      'Delete Goal',
+      'Are you sure you want to delete this goal?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await savingsGoalStorage.delete(id);
+              await loadData();
+              Alert.alert('Success', 'Goal deleted successfully!');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete goal');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
@@ -261,7 +329,7 @@ const SavingScreen: React.FC = () => {
             style={styles.editButton}
           />
         </View>
-        
+
         {!showEditEmergency ? (
           <View>
             <Text style={styles.fundAmount}>
@@ -270,30 +338,30 @@ const SavingScreen: React.FC = () => {
             <Text style={styles.fundTarget}>
               Goal: {formatINR(emergencyFund.target)}
             </Text>
-            
+
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View 
+                <View
                   style={[
                     styles.progressFill,
-                    getEmergencyFundProgress() >= 100 
-                      ? styles.progressComplete 
+                    getEmergencyFundProgress() >= 100
+                      ? styles.progressComplete
                       : styles.progressPartial,
                     { width: `${getEmergencyFundProgress()}%` }
-                  ]} 
+                  ]}
                 />
               </View>
               <Text style={styles.progressText}>
                 {Math.round(getEmergencyFundProgress())}% Complete
               </Text>
             </View>
-            
+
             <Text style={styles.fundAdvice}>
-              {emergencyFund.target === 0 
+              {emergencyFund.target === 0
                 ? "Set up your emergency fund target for financial security!"
                 : getEmergencyFundProgress() >= 100
-                ? "Great job! Your emergency fund is fully funded."
-                : "Keep building your emergency fund for unexpected expenses."
+                  ? "Great job! Your emergency fund is fully funded."
+                  : "Keep building your emergency fund for unexpected expenses."
               }
             </Text>
           </View>
@@ -306,7 +374,7 @@ const SavingScreen: React.FC = () => {
               placeholder="1,00,000"
               currency="₹"
             />
-            
+
             <CurrencyInput
               label="Current Amount"
               value={emergencyEdit.current}
@@ -316,14 +384,14 @@ const SavingScreen: React.FC = () => {
             />
 
             <View style={styles.buttonRow}>
-              <Button 
-                title="Cancel" 
+              <Button
+                title="Cancel"
                 variant="secondary"
                 onPress={() => setShowEditEmergency(false)}
                 style={styles.halfButton}
               />
-              <Button 
-                title="Update" 
+              <Button
+                title="Update"
                 onPress={updateEmergencyFund}
                 style={styles.halfButton}
               />
@@ -352,7 +420,7 @@ const SavingScreen: React.FC = () => {
               onChangeText={updateNewGoal('name')}
               placeholder="Vacation, Car, House..."
             />
-            
+
             <CurrencyInput
               label="Target Amount"
               value={newGoal.target}
@@ -360,7 +428,7 @@ const SavingScreen: React.FC = () => {
               placeholder="50,000"
               currency="₹"
             />
-            
+
             <CurrencyInput
               label="Current Amount"
               value={newGoal.current}
@@ -368,7 +436,7 @@ const SavingScreen: React.FC = () => {
               placeholder="0"
               currency="₹"
             />
-            
+
             <DateInput
               label="Target Date (Optional)"
               value={newGoal.targetDate}
@@ -378,14 +446,14 @@ const SavingScreen: React.FC = () => {
             />
 
             <View style={styles.buttonRow}>
-              <Button 
-                title="Cancel" 
+              <Button
+                title="Cancel"
                 variant="secondary"
                 onPress={() => setShowAddGoal(false)}
                 style={styles.halfButton}
               />
-              <Button 
-                title="Add Goal" 
+              <Button
+                title="Add Goal"
                 onPress={addSavingsGoal}
                 style={styles.halfButton}
               />
@@ -396,77 +464,184 @@ const SavingScreen: React.FC = () => {
         {savingsGoals.length > 0 ? (
           <View>
             {savingsGoals.map(goal => {
-              const progress = getSavingsGoalProgress(goal);
-              const daysToTarget = getDaysToTarget(goal.targetDate);
-              
+              const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+              const isComplete = progress >= 100;
+
               return (
                 <View key={goal.id} style={styles.goalItem}>
-                  <View style={styles.goalHeader}>
-                    <Text style={styles.goalName}>{goal.name}</Text>
-                    <Button
-                      title="×"
-                      variant="danger"
-                      onPress={() => deleteGoal(goal.id)}
-                      style={styles.deleteButton}
-                    />
-                  </View>
-                  
-                  <Text style={styles.goalAmount}>
-                    {formatINR(goal.current)} / {formatINR(goal.target)}
-                  </Text>
-                  
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                      <View 
-                        style={[
-                          styles.progressFill,
-                          progress >= 100 
-                            ? styles.progressComplete 
-                            : styles.progressPartial,
-                          { width: `${Math.min(progress, 100)}%` }
-                        ]} 
-                      />
-                    </View>
-                    <Text style={styles.progressText}>
-                      {Math.round(progress)}% Complete
-                    </Text>
-                  </View>
+                  {editingGoal === goal.id ? (
+                    // Edit Mode
+                    <View style={styles.editGoalForm}>
+                      <Text style={styles.editFormTitle}>Edit Goal</Text>
 
-                  {goal.targetDate && (
-                    <View style={styles.targetDateContainer}>
-                      <Text style={styles.targetDate}>
-                        Target: {new Date(goal.targetDate).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                      <Input
+                        label="Goal Name"
+                        value={goalEditForm.name}
+                        onChangeText={(value) => setGoalEditForm(prev => ({ ...prev, name: value }))}
+                        placeholder="e.g., New Car"
+                        style={styles.editInput}
+                      />
+
+                      <CurrencyInput
+                        label="Target Amount"
+                        value={goalEditForm.target}
+                        onChangeText={(value) => setGoalEditForm(prev => ({ ...prev, target: value }))}
+                        placeholder="100,000"
+                        currency="₹"
+                        style={styles.editInput}
+                      />
+
+                      <CurrencyInput
+                        label="Current Amount"
+                        value={goalEditForm.current}
+                        onChangeText={(value) => setGoalEditForm(prev => ({ ...prev, current: value }))}
+                        placeholder="25,000"
+                        currency="₹"
+                        style={styles.editInput}
+                      />
+
+                      <DateInput
+                        label="Target Date (Optional)"
+                        value={goalEditForm.targetDate}
+                        onChangeDate={(value) => setGoalEditForm(prev => ({ ...prev, targetDate: value }))}
+                        placeholder="Select target date"
+                      />
+
+                      <View style={styles.pickerSection}>
+                        <Text style={styles.label}>Category</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {['Emergency Fund', 'Short Term', 'Long Term', 'Investment'].map(cat => (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[
+                                styles.pickerChip,
+                                goalEditForm.category === cat && styles.pickerChipActive
+                              ]}
+                              onPress={() => setGoalEditForm(prev => ({ ...prev, category: cat }))}
+                            >
+                              <Text style={[
+                                styles.pickerChipText,
+                                goalEditForm.category === cat && styles.pickerChipTextActive
+                              ]}>
+                                {cat}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+
+                      <View style={styles.pickerSection}>
+                        <Text style={styles.label}>Priority</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {['High', 'Medium', 'Low'].map(priority => (
+                            <TouchableOpacity
+                              key={priority}
+                              style={[
+                                styles.pickerChip,
+                                goalEditForm.priority === priority && styles.pickerChipActive
+                              ]}
+                              onPress={() => setGoalEditForm(prev => ({ ...prev, priority }))}
+                            >
+                              <Text style={[
+                                styles.pickerChipText,
+                                goalEditForm.priority === priority && styles.pickerChipTextActive
+                              ]}>
+                                {priority}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+
+                      <View style={styles.editButtonRow}>
+                        <Button
+                          title="Cancel"
+                          variant="secondary"
+                          onPress={cancelGoalEdit}
+                          style={styles.editButton}
+                        />
+                        <Button
+                          title="Save Changes"
+                          onPress={() => saveGoalEdit(goal.id)}
+                          style={styles.editButton}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    // Display Mode
+                    <View>
+                      <View style={styles.goalHeader}>
+                        <View style={styles.goalTitleSection}>
+                          <Text style={styles.goalName}>{goal.name}</Text>
+                          <View style={styles.goalBadges}>
+                            {goal.priority && (
+                              <View style={[styles.priorityBadge, {
+                                backgroundColor: goal.priority === 'High' ? '#ef4444' :
+                                  goal.priority === 'Medium' ? '#f59e0b' : '#10b981'
+                              }]}>
+                                <Text style={styles.badgeText}>{goal.priority}</Text>
+                              </View>
+                            )}
+                            {goal.category && (
+                              <View style={styles.categoryBadge}>
+                                <Text style={styles.categoryBadgeText}>{goal.category}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.goalActions}>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => startEditingGoal(goal)}
+                          >
+                            <Ionicons name="create-outline" size={18} color="#2563eb" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => deleteGoal(goal.id)}
+                          >
+                            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      <Text style={styles.goalAmount}>
+                        {formatINR(goal.current)} / {formatINR(goal.target)}
                       </Text>
-                      {daysToTarget !== null && (
-                        <Text style={[
-                          styles.daysRemaining,
-                          daysToTarget < 0 ? styles.overdue : 
-                          daysToTarget <= 30 ? styles.urgent : styles.normal
-                        ]}>
-                          {daysToTarget > 0 
-                            ? `${daysToTarget} days remaining`
-                            : daysToTarget === 0 
-                            ? "Target date is today!"
-                            : `${Math.abs(daysToTarget)} days overdue`
-                          }
+
+                      <View style={styles.progressContainer}>
+                        <View style={styles.progressBar}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              isComplete ? styles.progressComplete : styles.progressPartial,
+                              { width: `${Math.min(progress, 100)}%` }
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.progressText}>
+                          {Math.round(progress)}% complete
+                        </Text>
+                      </View>
+
+                      {goal.targetDate && (
+                        <View style={styles.targetDateContainer}>
+                          <Text style={styles.targetDate}>
+                            Target: {new Date(goal.targetDate).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </Text>
+                        </View>
+                      )}
+
+                      {isComplete && (
+                        <Text style={styles.goalComplete}>
+                          🎉 Goal Achieved! Congratulations!
                         </Text>
                       )}
                     </View>
-                  )}
-
-                  <Button
-                    title="Update Progress"
-                    variant="secondary"
-                    onPress={() => promptUpdateGoal(goal)}
-                    style={styles.updateButton}
-                  />
-                  
-                  {progress >= 100 && (
-                    <Text style={styles.goalComplete}>🎉 Goal Completed!</Text>
                   )}
                 </View>
               );
@@ -659,6 +834,88 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
     lineHeight: 20,
+  },
+  editGoalForm: {
+    padding: 16,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#2563eb',
+  },
+  editFormTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  editInput: {
+    marginBottom: 12,
+  },
+  pickerSection: {
+    marginBottom: 16,
+  },
+  pickerChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  pickerChipActive: {
+    backgroundColor: '#2563eb',
+  },
+  pickerChipText: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  pickerChipTextActive: {
+    color: '#ffffff',
+  },
+  editButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  goalTitleSection: {
+    flex: 1,
+  },
+  goalBadges: {
+    flexDirection: 'row',
+    marginTop: 4,
+    gap: 6,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#e5e7eb',
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    color: '#374151',
+    fontWeight: '600',
+  },
+  goalActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
   },
 });
 
