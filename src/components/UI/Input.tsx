@@ -90,7 +90,10 @@ export const Input: React.FC<InputProps> = ({
   keyboardType = 'default',
   multiline = false,
   error,
-  style 
+  style,
+  secureTextEntry = false,
+  editable = true,
+  maxLength,
 }) => {
   return (
     <View style={[styles.container, style as ViewStyle]}>
@@ -107,6 +110,9 @@ export const Input: React.FC<InputProps> = ({
         keyboardType={keyboardType}
         multiline={multiline}
         placeholderTextColor="#9ca3af"
+        secureTextEntry={secureTextEntry}
+        editable={editable}
+        maxLength={maxLength}
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>

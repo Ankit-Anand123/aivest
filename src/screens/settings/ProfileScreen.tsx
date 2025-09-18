@@ -14,6 +14,12 @@ import { SecureBackupService } from '../../services/secureBackupService';
 import { Card } from '../../components/UI/Card';
 import { Button } from '../../components/UI/Button';
 import { Input } from '../../components/UI/Input';
+import { useFocusEffect } from '@react-navigation/native';
+import { expenseStorage, budgetStorage, savingsGoalStorage, emergencyFundStorage } from '../../utils/storage';
+import { firebaseOtpService } from '../../services/firebaseOtpService';
+import { EmailChangeModal } from '../../components/UI/EmailChangeModal';
+import { PhoneChangeModal } from '../../components/UI/PhoneChangeModal';
+
 
 interface ProfileScreenProps { }
 
@@ -24,6 +30,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
     const [loading, setLoading] = useState(false);
     const [backupInfo, setBackupInfo] = useState<any>(null);
     const [backupLoading, setBackupLoading] = useState(false);
+    const [stats, setStats] = useState({
+        totalExpenses: 0,
+        budgetCategories: 0,
+        savingsGoals: 0,
+        emergencyFundProgress: 0,
+    });
+    const [emailChangeModalVisible, setEmailChangeModalVisible] = useState(false);
+    const [phoneChangeModalVisible, setPhoneChangeModalVisible] = useState(false);
+    const [emailVerified, setEmailVerified] = useState(false);
 
     // Profile form state
     const [editForm, setEditForm] = useState({
@@ -55,10 +70,27 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
         },
     });
 
+    useFocusEffect(
+        React.useCallback(() => {
+            loadProfileStats();
+        }, [])
+    );
+
     // Load backup info on component mount
     useEffect(() => {
         loadBackupInfo();
     }, [firebaseUser]);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const checkEmailVerification = async () => {
+                const isVerified = await firebaseOtpService.isEmailVerified();
+                setEmailVerified(isVerified);
+            };
+
+            checkEmailVerification();
+        }, [])
+    );
 
     // Update form when user data changes
     useEffect(() => {
@@ -123,6 +155,84 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleEmailUpdate = async (newEmail: string, password: string): Promise<boolean> => {
+        try {
+            const result = await firebaseOtpService.updateEmailWithVerification(newEmail, password);
+
+            if (result.success) {
+                Alert.alert('Success', result.message);
+                // Refresh email verification status
+                setTimeout(async () => {
+                    const isVerified = await firebaseOtpService.isEmailVerified();
+                    setEmailVerified(isVerified);
+                }, 1000);
+                return true;
+            } else {
+                Alert.alert('Error', result.message);
+                return false;
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update email. Please try again.');
+            return false;
+        }
+    };
+
+    const handlePhoneUpdate = async (newPhone: string): Promise<boolean> => {
+        try {
+            // Update the phone number in your user profile
+            const success = await updateProfile({ phone: newPhone });
+            return success;
+        } catch (error) {
+            console.error('Phone update error:', error);
+            return false;
+        }
+    };
+
+    const handleSendEmailVerification = async () => {
+        try {
+            const result = await firebaseOtpService.sendEmailVerification();
+            Alert.alert(
+                result.success ? 'Verification Sent' : 'Error',
+                result.message
+            );
+        } catch (error) {
+            Alert.alert('Error', 'Failed to send verification email.');
+        }
+    };
+
+    const loadProfileStats = async () => {
+        try {
+            console.log('🔄 Loading profile statistics...');
+
+            // Load expenses count
+            const expenses = await expenseStorage.getAll();
+
+            // Load budgets count
+            const budgets = await budgetStorage.getAll();
+            const budgetCount = Object.keys(budgets).length;
+
+            // Load savings goals count
+            const savingsGoals = await savingsGoalStorage.getAll();
+
+            // Load emergency fund progress
+            const emergencyFund = await emergencyFundStorage.get();
+            const emergencyProgress = emergencyFund && emergencyFund.target > 0
+                ? Math.round((emergencyFund.current / emergencyFund.target) * 100)
+                : 0;
+
+            setStats({
+                totalExpenses: expenses.length,
+                budgetCategories: budgetCount,
+                savingsGoals: savingsGoals.length,
+                emergencyFundProgress: emergencyProgress,
+            });
+
+            console.log(`✅ Stats loaded: ${expenses.length} expenses, ${budgetCount} budgets, ${savingsGoals.length} goals`);
+        } catch (error) {
+            console.error('❌ Error loading profile stats:', error);
         }
     };
 
@@ -322,12 +432,25 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
                     icon="mail-outline"
                     label="Email"
                     value={user?.email || 'Not provided'}
+                    onPress={() => setEmailChangeModalVisible(true)}
+                    showChevron
+                    iconColor={emailVerified ? "#10b981" : "#f59e0b"}
                 />
+                {!emailVerified && (
+                    <ProfileItem
+                        icon="warning-outline"
+                        label="Email Verification"
+                        value="Click to verify your email"
+                        onPress={handleSendEmailVerification}
+                        showChevron
+                        iconColor="#ef4444"
+                    />
+                )}
                 <ProfileItem
                     icon="call-outline"
                     label="Phone"
                     value={user?.phone || 'Not provided'}
-                    onPress={() => setEditModalVisible(true)}
+                    onPress={() => setPhoneChangeModalVisible(true)}
                     showChevron
                 />
                 <ProfileItem
@@ -339,6 +462,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
                 />
             </ProfileSection>
 
+
             {/* Data & Backup */}
             <ProfileSection title="Data & Backup">
                 <ProfileItem
@@ -349,19 +473,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
                 {backupInfo && (
                     <>
                         <ProfileItem
-                            icon="document-text-outline"
-                            label="Expenses"
-                            value={`${backupInfo.dataSize?.expenses || 0} items`}
+                            icon="receipt-outline"
+                            label="Total Expenses"
+                            value={`${stats.totalExpenses} transactions`}
+                            iconColor="#ef4444"
                         />
                         <ProfileItem
-                            icon="target-outline"
-                            label="Savings Goals"
-                            value={`${backupInfo.dataSize?.savingsGoals || 0} items`}
-                        />
-                        <ProfileItem
-                            icon="folder-outline"
+                            icon="wallet-outline"
                             label="Budget Categories"
-                            value={`${backupInfo.dataSize?.budgetCategories || 0} items`}
+                            value={`${stats.budgetCategories} categories set`}
+                            iconColor="#2563eb"
+                        />
+                        <ProfileItem
+                            icon="trending-up-outline"
+                            label="Savings Goals"
+                            value={`${stats.savingsGoals} active goals`}
+                            iconColor="#10b981"
+                        />
+                        <ProfileItem
+                            icon="shield-checkmark-outline"
+                            label="Emergency Fund"
+                            value={`${stats.emergencyFundProgress}% complete`}
+                            iconColor="#f59e0b"
                         />
                     </>
                 )}
@@ -641,6 +774,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = () => {
                     </ScrollView>
                 </View>
             </Modal>
+            <EmailChangeModal
+                visible={emailChangeModalVisible}
+                onClose={() => setEmailChangeModalVisible(false)}
+                onEmailUpdate={handleEmailUpdate}
+                currentEmail={user?.email || ''}
+            />
+
+            {/* Phone Change Modal */}
+            <PhoneChangeModal
+                visible={phoneChangeModalVisible}
+                onClose={() => setPhoneChangeModalVisible(false)}
+                onPhoneUpdate={handlePhoneUpdate}
+                currentPhone={user?.phone}
+            />
         </ScrollView>
     );
 };

@@ -138,7 +138,10 @@ export interface InputProps {
   keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad';
   multiline?: boolean;
   error?: string;
+  secureTextEntry?: boolean;
   style?: object;
+  editable?: boolean;
+  maxLength?: number;
 }
 
 // Utility Types
