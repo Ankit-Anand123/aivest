@@ -31,7 +31,9 @@
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
+        "USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "plugins": [
@@ -43,6 +45,11 @@
         }
       ],
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "212226db-b999-4614-9e98-bb4a8ed6f7cb"
+      }
+    }
   }
 }
